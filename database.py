@@ -31,11 +31,6 @@ class InfluxBase:
         self.client.close()
         print("Connection closed.")
 
-    def shutdown(self):
-        if self.write_called:
-            self.write_api.flush()
-        self.client.close()
-
 
 class Data_Write(InfluxBase):
     """Send data to database"""
@@ -47,7 +42,7 @@ class Data_Write(InfluxBase):
         self.write_called = True
 
     def initial_data(self):
-        """Manually save the data to the database"""
+        """Manually creates data"""
 
         point = (
             Point("reactor_metrics_test2")
@@ -73,7 +68,7 @@ class Data_Write(InfluxBase):
 
 
     def generated_data(self, **data):
-        """Save the data to the database using a dictionary with generated information"""
+        """Takes data and converts to InfluxDB scheme"""
 
         point = Point("reactor_metrics_test2")
         for key, value in data.items():
@@ -85,6 +80,7 @@ class Data_Write(InfluxBase):
         self.send_data(point)
 
     def send_data(self, point):
+        """Sends the data to database"""
 
         with self.client.write_api(write_options=SYNCHRONOUS) as self.write_api:
             try:
