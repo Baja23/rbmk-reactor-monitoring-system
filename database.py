@@ -3,14 +3,14 @@ from influxdb_client.client.write_api import SYNCHRONOUS
 from datetime import datetime, UTC
 import time
 import pandas as pd
-
+import keyboard
+import threading
 
 
 class InfluxBase:
     """Provide necessary attributes for database connection"""
 
     def __init__(self):
-        self.write_called = False
         self.write_api = None
         self.query_api = None
         self.url = "https://eu-central-1-1.aws.cloud2.influxdata.com/"
@@ -31,6 +31,21 @@ class InfluxBase:
         self.client.close()
         print("Connection closed.")
 
+# The block below is used to "listen" if any key is pressed.
+# In this case, if "q" is pressed, Python will declare "stop.set()"
+# This will make the while loop in "send_data" method to stop.
+# Which means it will stop the loop sending the information and connection will close.
+# This is important, because we do not want to keep opening and closing the connection each loop.
+
+stop = threading.Event()
+
+def listen():
+    keyboard.wait("q")
+    stop.set()
+
+threading.Thread(target=listen, daemon= True).start()
+
+
 
 class Data_Write(InfluxBase):
     """Send data to database"""
@@ -39,23 +54,21 @@ class Data_Write(InfluxBase):
         """Initialize a connection with database"""
         super().__init__()
 
-        self.write_called = True
-
     def initial_data(self):
         """Manually creates data"""
 
         point = (
             Point("reactor_metrics_test2")
-            .field("fuel_reactivity", 8.905)
-            .field("orm_value", 125.0)
-            .field("partially_inserted", 1.0)
-            .field("inlet_temp_c", 275.0)
-            .field("outlet_temp_c", 280.0)
-            .field("coolant_flow_m3h", 43000.0)
-            .field("tau", 8.0)
-            .field("thermal_power_mw", 3000.0)
-            .field("reactivity_delta", 1.0)
-            .field("xenon_level", 0.5)
+            .field("fuel_reactivity", 5.905)
+            .field("orm_value", 102.0)
+            .field("partially_inserted", 0.0)
+            .field("inlet_temp_c", 270.0)
+            .field("outlet_temp_c", 284.0)
+            .field("coolant_flow_m3h", 45000.0)
+            .field("tau", 10.0)
+            .field("thermal_power_mw", 3200.0)
+            .field("reactivity_delta", 0.0)
+            .field("xenon_level", 1.0)
             .field("neutron_flux_pct", 100.0)
             .field("severity_level", 0.8)
             .field("subsystem", "a")
@@ -64,7 +77,8 @@ class Data_Write(InfluxBase):
         )
 
         print(point.to_line_protocol())
-        self.send_data(point)
+        with write.client.write_api(write_options=SYNCHRONOUS) as write.write_api:
+            self.send_data(point)
 
 
     def generated_data(self, **data):
@@ -73,7 +87,6 @@ class Data_Write(InfluxBase):
         point = Point("reactor_metrics_test2")
         for key, value in data.items():
             point = point.field(key, value)
-            print(value, key)
 
         point = point.time(datetime.now(UTC), WritePrecision.NS)
 
@@ -82,11 +95,13 @@ class Data_Write(InfluxBase):
     def send_data(self, point):
         """Sends the data to database"""
 
-        with self.client.write_api(write_options=SYNCHRONOUS) as self.write_api:
-            try:
-                self.write_api.write(bucket=self.bucket, org=self.org, record=point)
-            except Exception as e:
-                print("Write error: ", e)
+        try:
+            self.write_api.write(bucket=self.bucket, org=self.org, record=point)
+            print("Data successfully sent!")
+        except Exception as e:
+            print("Write error: ", e)
+
+        time.sleep(1)
 
 
 
@@ -98,13 +113,13 @@ class Data_Read(InfluxBase):
 
         super().__init__()
 
-    def take_data(self):
+    def take_data(self, last, time_range):
         """ Take data from the database"""
 
-        print(self.bucket)
-        self.query = '''
+        self.tables = []
+        self.query = f'''
             from(bucket: "reactor_test")
-              |> range(start: -24h)
+              |> range(start: -{time_range})
               |> filter(fn: (r) => r._measurement == "reactor_metrics_test2")
               |> filter(fn: (r) =>
                   contains(
@@ -129,12 +144,15 @@ class Data_Read(InfluxBase):
                   )
 
                 )
+              {last}
         '''
-        with self.client.query_api() as self.query_api:
-            try:
-                self.tables = self.query_api.query(self.query, org=self.org)
-            except Exception as e:
-                print("Write error: ", e)
+        self.query_api = self.client.query_api()
+        try:
+            self.tables = self.query_api.query(self.query, org=self.org)
+        except Exception as e:
+            print("Write error: ", e)
+
+
 
     def influx_to_df(self):
         """Transform InfluxDB output scheme to dictionary for DataFrame"""
@@ -159,59 +177,80 @@ class Data_Read(InfluxBase):
                 value_list.append(record.get_value())
                 field_key = record.get_field()
 
-            self.conv_data[f'{field_key}'] = value_list
+            if len(value_list) == 1:
+                self.conv_data[f'{field_key}'] = value_list[0]
+            else:
+                self.conv_data[f'{field_key}'] = value_list
+
+        print(f"Test thermal power influx to df: {self.conv_data['thermal_power_mw']}")
 
         self.conv_data['time'] = time_list
 
         self.df = pd.DataFrame(self.conv_data)
-        self.df.to_csv("out.csv", index=False)
+
+
+        # y_n = input("\nType 'y' if you want to save data to CSV.")
+        # if y_n == 'y':
+        #     self.df.to_csv("out.csv", index=False)
+
+    def take_single_data(self):
+        """Takes a data of a single field from latest record from database"""
+
+        self.query = f'''
+                    from(bucket: "reactor_test")
+                      |> range(start: -48h)
+                      |> filter(fn: (r) => r._measurement == "reactor_metrics_test2")
+                      |> filter(fn: (r) => r._field == "thermal_power_mw")
+                      |> last()
+                '''
+        self.query_api = self.client.query_api()
+        try:
+            results = self.query_api.query(self.query, org=self.org)
+
+            for table in results:
+                for record in table.records:
+                    self.power_mw = record.get_value()
+        except Exception as e:
+            print("Write error: ", e)
+
+
+# data = {
+#     "fuel_reactivity": 5.905,
+#     "orm_value": 101.0,
+#     "partially_inserted": 0.0,
+#     "inlet_temp_c": 270.0,
+#     "outlet_temp_c": 284.0,
+#     "coolant_flow_m3h": 45000.0,
+#     "tau": 10.0,
+#     "thermal_power_mw": 3200.0,
+#     "reactivity_delta": 0.0,
+#     "xenon_level": 1.0,
+#     "neutron_flux_pct": 95.0,
+#     "severity_level": 1.0,
+#     "subsystem": "a",
+#     "alarm_message": "b",
+# }
 
 
 
-#         for table in tables:
-#             for record in table.records:
-#                 print(
-#                     "time:", record.get_time(),
-#                     "value:", record.get_value(),
-#                     "type:", type(record.get_value()),
-#                     "field:", record.get_field(),
-#                     "measurement:", record.get_measurement()
-#                 )
-#                 break
 
 
+# approve = input("Type 'y' if you want to write data, type 'n' if you don't: ")
 
-data = {
-    "fuel_reactivity": 5.905,
-    "orm_value": 105,
-    "partially_inserted": 0,
-    "inlet_temp_c": 270.0,
-    "outlet_temp_c": 284.0,
-    "coolant_flow_m3h": 45000.0,
-    "tau": 10.0,
-    "thermal_power_mw": 3200.0,
-    "reactivity_delta": 0.0,
-    "xenon_level": 1.0,
-    "neutron_flux_pct": 95.0,
-    "severity_level": 1,
-    "subsystem": "a",
-    "alarm_message": "b",
-}
-
-approve = input("Type 'y' if you want to write data, type 'n' if you don't: ")
-
-if approve == "y":
-    with Data_Write() as write:
-        write.initial_data()
-        time.sleep(2)
-
-approve = input("Type 'y' if you want to download data, type 'n' if you don't: ")
-
-if approve == "y":
-    with Data_Read() as take:
-        take.take_data()
-        take.influx_to_df()
-        time.sleep(2)
+# if approve == "y":
+with Data_Write() as write:
+    write.initial_data()
+    time.sleep(2)
+#
+# approve = input("Type 'y' if you want to download data, type 'n' if you don't: ")
+#
+# if approve == "y":
+# with Data_Read() as take:
+#     # take.take_data(last="", time_range="35m")
+#     take.take_single_data()
+#     # take.influx_to_df()
+#     time.sleep(2)
+#
 
 
 
