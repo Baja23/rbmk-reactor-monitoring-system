@@ -13,10 +13,10 @@ class InfluxBase:
     def __init__(self):
         self.write_api = None
         self.query_api = None
-        self.url = ""
-        self.token = ""
-        self.org = ""
-        self.bucket = ""
+        self.url = "https://eu-central-1-1.aws.cloud2.influxdata.com/"
+        self.token = "mgFpC0vmS6Mn9Yc9XJcd1_wweo35NMOWe-2ET31CO9y6-ppBYYfoTUgDd8i0AqrnA3ze9NzLm3BIPkHnZe1asg=="
+        self.org = "Student project"
+        self.bucket = "reactor_test"
         self.client = InfluxDBClient(url=self.url, token=self.token, org=self.org)
 
     # "__enter__" and "__exit__"  are magical/special methods. These allow this class to become context manager
@@ -51,7 +51,7 @@ class Data_Write(InfluxBase):
     """Send data to database"""
 
     def __init__(self):
-        """Initialize a connection with database"""
+        """Take necessary attributes for database connection from parent class"""
         super().__init__()
 
     def initial_data(self):
@@ -109,7 +109,7 @@ class Data_Read(InfluxBase):
     """Take data from database"""
 
     def __init__(self):
-        """Initialize the "___init__()" method from parent class."""
+        """Take necessary attributes for database connection from parent class"""
 
         super().__init__()
 
