@@ -5,7 +5,9 @@ import time
 import pandas as pd
 import keyboard
 import threading
-
+from dotenv import load_dotenv
+import os
+load_dotenv()
 
 class InfluxBase:
     """Provide necessary attributes for database connection"""
@@ -13,10 +15,10 @@ class InfluxBase:
     def __init__(self):
         self.write_api = None
         self.query_api = None
-        self.url = ""
-        self.token = ""
-        self.org = ""
-        self.bucket = ""
+        self.url = os.getenv("URL")
+        self.token = os.getenv("TOKEN")
+        self.org = os.getenv("ORG")
+        self.bucket = os.getenv("BUCKET")
         self.client = InfluxDBClient(url=self.url, token=self.token, org=self.org)
 
     # "__enter__" and "__exit__"  are magical/special methods. These allow this class to become context manager
@@ -55,7 +57,7 @@ class Data_Write(InfluxBase):
         super().__init__()
 
     def initial_data(self):
-        """Manually creates data"""
+        """Manually creates data""" 
 
         point = (
             Point("reactor_metrics_test2")
@@ -65,7 +67,7 @@ class Data_Write(InfluxBase):
             .field("inlet_temp_c", 270.0)
             .field("outlet_temp_c", 284.0)
             .field("coolant_flow_m3h", 45000.0)
-            .field("tau", 10.0)
+            .field("tau", 100.0)
             .field("thermal_power_mw", 3200.0)
             .field("reactivity_delta", 0.0)
             .field("xenon_level", 1.0)

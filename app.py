@@ -1,4 +1,4 @@
-from schematest import Reactor, reactor_run
+from schemas import Reactor, reactor_run
 import database as db
 from influxdb_client.client.write_api import SYNCHRONOUS
 
@@ -13,8 +13,6 @@ def main():
         with write.client.write_api(write_options=SYNCHRONOUS) as write.write_api:
             while not db.stop.is_set():
                 reactor_run(reactor, 1.0)
-                thermal_power = int(reactor.thermal_power_mw)
-                reactor.rods_change(thermal_power)
                 print(f"Thermal power main: {reactor.thermal_power_mw}")
                 print("\n")
                 data = {

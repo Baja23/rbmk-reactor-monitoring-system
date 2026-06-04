@@ -1,2 +1,4 @@
 temps
 __pycache__/
+venv
+.env
