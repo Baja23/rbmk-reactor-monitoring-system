@@ -121,7 +121,7 @@ class Reactor:
             # 6. ZABEZPIECZENIA FIZYCZNE
             # Nie możemy mieć mniej niż 0 prętów (całkowicie wyciągnięte) 
             # i nie więcej niż zadeklarowana liczba dostępnych w strefie.
-            max_available_rods = 211 - self.partially_inserted
+            max_available_rods = 85
             self.orm_value = max(0.0, min(new_orm, max_available_rods))
 
 def reactor_run(reactor: object, delta_time: float):

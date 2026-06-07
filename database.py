@@ -240,19 +240,18 @@ class Data_Read(InfluxBase):
 # approve = input("Type 'y' if you want to write data, type 'n' if you don't: ")
 
 # if approve == "y":
-with Data_Write() as write:
+'''with Data_Write() as write:
     write.initial_data()
-    time.sleep(2)
+    time.sleep(2)'''
 #
 # approve = input("Type 'y' if you want to download data, type 'n' if you don't: ")
 #
 # if approve == "y":
-# with Data_Read() as take:
-#     # take.take_data(last="", time_range="35m")
-#     take.take_single_data()
-#     # take.influx_to_df()
-#     time.sleep(2)
-#
-
+with Data_Read() as take:
+    take.take_data(last="", time_range="120h")
+    take.take_single_data()
+    take.influx_to_df()
+    time.sleep(2)
+    take.df.to_parquet('Influx_RBML_data.parquet')
 
 
