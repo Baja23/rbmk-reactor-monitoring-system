@@ -79,7 +79,7 @@ class Data_Write(InfluxBase):
         )
 
         print(point.to_line_protocol())
-        with write.client.write_api(write_options=SYNCHRONOUS) as write.write_api:
+        with self.client.write_api(write_options=SYNCHRONOUS) as self.write_api:
             self.send_data(point)
 
 
@@ -133,6 +133,7 @@ class Data_Read(InfluxBase):
                       "inlet_temp_c",
                       "outlet_temp_c",
                       "coolant_flow_m3h",
+                      "v_steam",
                       "tau",
                       "thermal_power_mw",
                       "reactivity_delta",
@@ -247,11 +248,11 @@ class Data_Read(InfluxBase):
 # approve = input("Type 'y' if you want to download data, type 'n' if you don't: ")
 #
 # if approve == "y":
-with Data_Read() as take:
+'''with Data_Read() as take:
     take.take_data(last="", time_range="120h")
     take.take_single_data()
     take.influx_to_df()
     time.sleep(2)
-    take.df.to_parquet('Influx_RBML_data.parquet')
+    take.df.to_parquet('Influx_RBML_data.parquet')'''
 
 

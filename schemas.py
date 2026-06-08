@@ -25,6 +25,39 @@ class Reactor:
         # self.alarm_message = alarm_message
 
 
+    def update_thermo_hydraulics(self):
+        """
+        Silnik termodynamiczny rdzenia. 
+        Oblicza temperaturę wylotową oraz ułamek objętościowy pary (v_steam).
+        """
+        boiling_point = 284.0
+        
+        # Stała pojemności cieplnej (dobrana tak, by przy 3200MW i 45000m3/h delta T = ~14C)
+        k_termo = 197.0 
+        
+        # 1. Teoretyczny przyrost temperatury (jeśli woda by nie wrzała)
+        delta_t = k_termo * (self.thermal_power_mw / self.coolant_flow_m3h)
+        theoretical_outlet = self.inlet_temp_c + delta_t
+        
+        # 2. Obliczanie Marginesu Niedogrzania
+        subcooling_margin = boiling_point - self.inlet_temp_c
+        
+        # 3. Logika progu wrzenia
+        if theoretical_outlet < boiling_point:
+            # Stan bezpieczny: brak wrzenia (reaktor wyłączony lub potężny przepływ)
+            self.outlet_temp_c = theoretical_outlet
+            self.v_steam = 0.0
+        else:
+            # Stan pracy RBMK: woda osiąga 284 C i zaczyna wrzeć
+            self.outlet_temp_c = boiling_point
+            
+            # Obliczamy ilość pary na podstawie naszego wzoru z poprzednich kroków.
+            # Im mniejszy margines niedogrzania, tym mniej ciepła idzie w podgrzanie wody, a więcej w parę.
+            raw_voids = (3.068 * (self.thermal_power_mw / self.coolant_flow_m3h)) - (subcooling_margin * 0.005)
+            
+            # Zabezpieczenie przed ujemną parą (objętość nie może spaść poniżej 0)
+            self.v_steam = max(0.0, raw_voids)
+
     def thermal_power(self, delta_time):
         self.rod_change = (self.reactivity_delta * self.thermal_power_mw / self.tau) * delta_time
         self.thermal_power_mw += self.rod_change  # zmienić
@@ -32,12 +65,12 @@ class Reactor:
             self.thermal_power_mw = 160.0
 
     def positive_void_coefficient(self):
-        subcooling_margin = self.outlet_temp_c - self.inlet_temp_c 
-        raw_voids = (3.068 * (self.thermal_power_mw / self.coolant_flow_m3h)) - (subcooling_margin * 0.005)
+        #subcooling_margin = self.outlet_temp_c - self.inlet_temp_c 
+        #raw_voids = (3.068 * (self.thermal_power_mw / self.coolant_flow_m3h)) - (subcooling_margin * 0.005)
         
-        v_steam = max(0.0, raw_voids)
+        #v_steam = max(0.0, raw_voids)
         
-        void_reactivity = v_steam * 4.5
+        void_reactivity = self.v_steam * 4.5
         return void_reactivity
 
     # xenon_poisoning
@@ -124,10 +157,24 @@ class Reactor:
             max_available_rods = 85
             self.orm_value = max(0.0, min(new_orm, max_available_rods))
 
+    def set_coolant_flow(self, target_flow_m3h):
+        """
+        Symuluje zmianę wydajności Głównych Pomp Cyrkulacyjnych (GPC).
+        Normalny przepływ to 45000.0 m3/h. Spadek poniżej 30000 to ostra awaria.
+        """
+        # Zabezpieczenie przed ujemnym lub zerowym przepływem (dzielenie przez zero!)
+        self.coolant_flow_m3h = max(100.0, target_flow_m3h)
+
+    def set_inlet_temperature(self, target_temp_c):
+        """
+        Symuluje zmianę temperatury wody zasilającej powracającej z turbin.
+        Normalnie 270.0 C. Zbliżenie się do 284.0 C to stan krytyczny.
+        """
+        # Woda nie może wejść do rdzenia jako para, ograniczamy do 283.0
+        self.inlet_temp_c = min(target_temp_c, 283.0)
+
 def reactor_run(reactor: object, delta_time: float):
-    void_reactivity = reactor.positive_void_coefficient()
-    xenon_reactivity = reactor.xenon_poisoning()
-    rods_reactivity = reactor.control_rods_insertion()
-    reactor.update_reactor_state(reactor.thermal_power_mw, delta_time)
     reactor.automatic_regulator(delta_time)
+    reactor.update_thermo_hydraulics()
+    reactor.update_reactor_state(reactor.thermal_power_mw, delta_time)
     time.sleep(delta_time)

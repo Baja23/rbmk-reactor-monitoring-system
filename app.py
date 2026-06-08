@@ -23,6 +23,7 @@ def main():
                     "inlet_temp_c": reactor.inlet_temp_c,
                     "outlet_temp_c": reactor.outlet_temp_c,
                     "coolant_flow_m3h": reactor.coolant_flow_m3h,
+                    "v_steam": reactor.v_steam,
                     "tau": reactor.tau,
                     "reactivity_delta": reactor.reactivity_delta,
                     "xenon_level": reactor.xenon_level,
