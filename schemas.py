@@ -25,6 +25,39 @@ class Reactor:
         # self.alarm_message = alarm_message
 
 
+    def update_thermo_hydraulics(self):
+        """
+        Silnik termodynamiczny rdzenia. 
+        Oblicza temperaturę wylotową oraz ułamek objętościowy pary (v_steam).
+        """
+        boiling_point = 284.0
+        
+        # Stała pojemności cieplnej (dobrana tak, by przy 3200MW i 45000m3/h delta T = ~14C)
+        k_termo = 197.0 
+        
+        # 1. Teoretyczny przyrost temperatury (jeśli woda by nie wrzała)
+        delta_t = k_termo * (self.thermal_power_mw / self.coolant_flow_m3h)
+        theoretical_outlet = self.inlet_temp_c + delta_t
+        
+        # 2. Obliczanie Marginesu Niedogrzania
+        subcooling_margin = boiling_point - self.inlet_temp_c
+        
+        # 3. Logika progu wrzenia
+        if theoretical_outlet < boiling_point:
+            # Stan bezpieczny: brak wrzenia (reaktor wyłączony lub potężny przepływ)
+            self.outlet_temp_c = theoretical_outlet
+            self.v_steam = 0.0
+        else:
+            # Stan pracy RBMK: woda osiąga 284 C i zaczyna wrzeć
+            self.outlet_temp_c = boiling_point
+            
+            # Obliczamy ilość pary na podstawie naszego wzoru z poprzednich kroków.
+            # Im mniejszy margines niedogrzania, tym mniej ciepła idzie w podgrzanie wody, a więcej w parę.
+            raw_voids = (3.068 * (self.thermal_power_mw / self.coolant_flow_m3h)) - (subcooling_margin * 0.005)
+            
+            # Zabezpieczenie przed ujemną parą (objętość nie może spaść poniżej 0)
+            self.v_steam = max(0.0, raw_voids)
+
     def thermal_power(self, delta_time):
         self.rod_change = (self.reactivity_delta * self.thermal_power_mw / self.tau) * delta_time
         self.thermal_power_mw += self.rod_change  # zmienić
@@ -32,19 +65,26 @@ class Reactor:
             self.thermal_power_mw = 160.0
 
     def positive_void_coefficient(self):
-        wynik = 3.068 * (self.thermal_power_mw / self.coolant_flow_m3h) - 0.068
-        v_steam = max(0.0, wynik)
-        void_reactivity = v_steam * 4.5
-        print(f"Void reactivity: {void_reactivity}")
+        #subcooling_margin = self.outlet_temp_c - self.inlet_temp_c 
+        #raw_voids = (3.068 * (self.thermal_power_mw / self.coolant_flow_m3h)) - (subcooling_margin * 0.005)
+        
+        #v_steam = max(0.0, raw_voids)
+        
+        void_reactivity = self.v_steam * 4.5
         return void_reactivity
 
     # xenon_poisoning
-    def xenon_poisoning(self, hist_thermal_power=3200.0):
-        self.rod_change = ((0.00005 * hist_thermal_power) - (0.00005 * self.xenon_level * self.thermal_power_mw) - (self.xenon_level - (0.0021 * self.xenon_level)))
-        self.xenon_level = max(0.0, self.xenon_level + self.rod_change)
+    def xenon_poisoning(self, hist_thermal_power=3200, delta_t=1.0):
+        production = 0.00005 * hist_thermal_power
+        
+        burnup = 0.00005 * self.xenon_level * self.thermal_power_mw
+        
+        decay = 0.00021 * self.xenon_level
+        
+        change = (production - burnup - decay) * delta_t
+        self.xenon_level = max(0.0, self.xenon_level + change)
+        
         xenon_reactivity = -4.0 * self.xenon_level
-        print(f"Xenon level: {self.xenon_level}")
-        print(f"Xenon reactivity: {xenon_reactivity}")
         return xenon_reactivity
 
     # control_rods_insertion
@@ -53,89 +93,88 @@ class Reactor:
         print(f"Rods reactivity: {rods_reactivity}")
         return rods_reactivity
 
-    def update_reactivity(self, void_reactivity, xenon_reactivity, rods_reactivity):
-        self.reactivity_delta = self.fuel_reactivity + void_reactivity + xenon_reactivity + rods_reactivity
+    def update_reactor_state(self, hist_thermal_power, delta_t=1.0):
+        # KROK 1: Wyliczenie wszystkich oporów i przyspieszeń
+        void_rho = self.positive_void_coefficient()
+        xenon_rho = self.xenon_poisoning(hist_thermal_power, delta_t)
+        rods_rho = self.control_rods_insertion()
+        
+        # KROK 2: Bilans Reaktywności (Całkowita Suma)
+        # fuel_reactivity to nasza idealna podstawa wyliczona przy kalibracji na start
+        self.reactivity_delta = self.fuel_reactivity + void_rho + xenon_rho + rods_rho
+        
+        # KROK 3: Wykładnicza zmiana mocy cieplnej
+        # Zależy od całkowitej reaktywności i stałej czasowej (tau)
+        power_change = (self.reactivity_delta * self.thermal_power_mw / self.tau) * delta_t
+        self.thermal_power_mw += power_change
+        
+        # Zabezpieczenie fizyczne: Ciepło powyłączeniowe (Decay Heat)
+        # Z rozpadu promieniotwórczego, zawsze emitowane jest ok. 5% ciepła, nawet po wciśnięciu AZ-5
+        if self.thermal_power_mw < 160.0:
+            self.thermal_power_mw = 160.0
+            
+        # KROK 4: Skorelowanie Strumienia Neutronów
+        # Strumień (w %) to po prostu relacja obecnej mocy cieplnej z rozszczepień do mocy nominalnej (3200)
+        self.neutron_flux_pct = (self.thermal_power_mw / 3200.0) * 100.0
 
 
 
-    def rods_change(self, thermal_power):
-        """Insert and eject rods from reactor"""
+    def automatic_regulator(self, delta_t=1.0):
+            """
+            Symuluje system LAR/AR (Lokalny Automatyczny Regulator).
+            Koryguje moc poprzez powolne opuszczanie/podnoszenie prętów w strefie boru.
+            """
+            target_power = 3200.0
+            
+            # 1. Obliczenie uchybu
+            error = self.thermal_power_mw - target_power
+            
+            # 2. STREFA NIECZUŁOŚCI (Deadband)
+            # AR nie reaguje, jeśli moc waha się minimalnie (np. +/- 15 MW). 
+            # Zapobiega to "drżeniu" prętów w każdej sekundzie.
+            if abs(error) < 15.0:
+                return # Reaktor jest stabilny, nie robimy nic
+                
+            # 3. KIERUNEK RUCHU
+            # Używamy float zamiast int, aby symulować np. ruch pręta o pół metra w ciągu sekundy.
+            # Wartość 0.005 to tzw. "Wzmocnienie Regulatora" - im mniejsza, tym spokojniejszy ruch.
+            rod_movement = error * 0.05 * delta_t 
+            
+            # 4. LIMIT PRĘDKOŚCI RUCHU
+            # AR nie może poruszyć nagle 40 prętów. Może zmienić odpowiednik np. max 10 prętów na sekundę.
+            # Funkcja min() i max() docina wartość do bezpiecznego przedziału [-10.0, 10.0]
+            rod_movement = max(-10.0, min(rod_movement, 10.0))
+            
+            # 5. AKTUALIZACJA STANU RDZENIA
+            # Jeśli moc jest za duża (error > 0), rod_movement jest dodatni. 
+            # Dodajemy tę wartość do orm_value (więcej boru w rdzeniu -> moc spadnie).
+            # Jeśli moc jest za mała (error < 0), rod_movement jest ujemny (wyciągamy bor -> moc wzrośnie).
+            new_orm = self.orm_value + rod_movement
+            
+            # 6. ZABEZPIECZENIA FIZYCZNE
+            # Nie możemy mieć mniej niż 0 prętów (całkowicie wyciągnięte) 
+            # i nie więcej niż zadeklarowana liczba dostępnych w strefie.
+            max_available_rods = 85
+            self.orm_value = max(0.0, min(new_orm, max_available_rods))
 
-        print(f"Counter count: {self.rod_counter}")
-        target_power = 3200
+    def set_coolant_flow(self, target_flow_m3h):
+        """
+        Symuluje zmianę wydajności Głównych Pomp Cyrkulacyjnych (GPC).
+        Normalny przepływ to 45000.0 m3/h. Spadek poniżej 30000 to ostra awaria.
+        """
+        # Zabezpieczenie przed ujemnym lub zerowym przepływem (dzielenie przez zero!)
+        self.coolant_flow_m3h = max(100.0, target_flow_m3h)
 
-        print(thermal_power)
-        error  = int(thermal_power) - target_power # Checks the delta between desired output and current output
-        # error = error * (abs(error) >= 50)
-        print(f"Error value: {error}")
-        available_rods = 211 - self.orm_value - self.partially_inserted # Gives a number of available rods
-        print(f"Available rods: {available_rods}")
-        self.rod_change = int(error * 0.06) # Calculates how many rods should be inserted/ejected based on error value
-        print(f"Rod change: {self.rod_change}")
-        self.rod_change = min(max(-40, min(self.rod_change, 40)), available_rods) # Limits the rod movement to -40 or 40, or if rods insertion exceeds available rods, it's set to the value of available rods
-
-        if self.rod_change < 0: # This conditional is to check if rod movement would leave inserted rods below 0 value
-            if self.orm_value + self.rod_change < 0:
-                self.rod_change = self.rod_change + (abs(self.rod_change + self.orm_value))
-                print(f"Orm_value after abs: {self.orm_value}")
-
-        # if error > 300 or error < -300:
-        #     self.rod_change = int(self.rod_change * 1.2)
-
-        self.rod_change_list.append(self.rod_change)
-        print(f"Rod change list: {self.rod_change_list[0]}")
-
-        if self.rod_change_list[0] == 0: # The actual purpose of the list is to store the original single variable.
-                                         # Simulation goes in the loop, so it's impossible to store a value in a variable
-                                         # To circumvene that a list is created where only first element will be used
-            del self.rod_change_list[0]  # We delete the first element if it is equal to 0 to let the conditionals below work
-
-        # Rods control need to finish its work before
-
-
-
-        try:
-            if self.rod_change_list[0] > 0 and available_rods > 0: # available_rods to change
-                if self.rod_counter == 1:
-                    self.partially_inserted += self.rod_change_list[0]
-                if self.rod_counter == 2:
-                    self.partially_inserted -= self.rod_change_list[0]
-                    self.orm_value += self.rod_change_list[0]
-                    del self.rod_change_list[:]
-                    self.rod_counter = 0
-                self.rod_counter += 1
-
-
-            elif self.rod_change_list[0] < 0 and self.partially_inserted >= 0: # partially_inserted to change
-                print("Test elif")
-                if self.rod_counter == 1:
-                    self.orm_value += self.rod_change_list[0]
-                    self.partially_inserted -= self.rod_change_list[0]
-                if self.rod_counter == 2:
-                    self.partially_inserted += self.rod_change_list[0]
-                    del self.rod_change_list[:]
-                    self.rod_counter =0
-                self.rod_counter += 1
-
-        except IndexError:
-            pass
-
-            if available_rods == 0:
-                print("No rods available.")
-            elif self.partially_inserted < 0:
-                print("Partially inserted rods can't go below 0.")
-
-        print(f"Orm, par values: {self.orm_value}, {self.partially_inserted}")
-
-
-
-
-
+    def set_inlet_temperature(self, target_temp_c):
+        """
+        Symuluje zmianę temperatury wody zasilającej powracającej z turbin.
+        Normalnie 270.0 C. Zbliżenie się do 284.0 C to stan krytyczny.
+        """
+        # Woda nie może wejść do rdzenia jako para, ograniczamy do 283.0
+        self.inlet_temp_c = min(target_temp_c, 283.0)
 
 def reactor_run(reactor: object, delta_time: float):
-    void_reactivity = reactor.positive_void_coefficient()
-    xenon_reactivity = reactor.xenon_poisoning()
-    rods_reactivity = reactor.control_rods_insertion()
-    reactor.update_reactivity(void_reactivity, xenon_reactivity, rods_reactivity)
-    reactor.thermal_power(delta_time)
+    reactor.automatic_regulator(delta_time)
+    reactor.update_thermo_hydraulics()
+    reactor.update_reactor_state(reactor.thermal_power_mw, delta_time)
     time.sleep(delta_time)

@@ -5,7 +5,9 @@ import time
 import pandas as pd
 import keyboard
 import threading
-
+from dotenv import load_dotenv
+import os
+load_dotenv()
 
 class InfluxBase:
     """Provide necessary attributes for database connection"""
@@ -13,10 +15,10 @@ class InfluxBase:
     def __init__(self):
         self.write_api = None
         self.query_api = None
-        self.url = ""
-        self.token = ""
-        self.org = ""
-        self.bucket = ""
+        self.url = os.getenv("URL")
+        self.token = os.getenv("TOKEN")
+        self.org = os.getenv("ORG")
+        self.bucket = os.getenv("BUCKET")
         self.client = InfluxDBClient(url=self.url, token=self.token, org=self.org)
 
     # "__enter__" and "__exit__"  are magical/special methods. These allow this class to become context manager
@@ -55,7 +57,7 @@ class Data_Write(InfluxBase):
         super().__init__()
 
     def initial_data(self):
-        """Manually creates data"""
+        """Manually creates data""" 
 
         point = (
             Point("reactor_metrics_test2")
@@ -65,7 +67,7 @@ class Data_Write(InfluxBase):
             .field("inlet_temp_c", 270.0)
             .field("outlet_temp_c", 284.0)
             .field("coolant_flow_m3h", 45000.0)
-            .field("tau", 10.0)
+            .field("tau", 100.0)
             .field("thermal_power_mw", 3200.0)
             .field("reactivity_delta", 0.0)
             .field("xenon_level", 1.0)
@@ -77,7 +79,7 @@ class Data_Write(InfluxBase):
         )
 
         print(point.to_line_protocol())
-        with write.client.write_api(write_options=SYNCHRONOUS) as write.write_api:
+        with self.client.write_api(write_options=SYNCHRONOUS) as self.write_api:
             self.send_data(point)
 
 
@@ -131,6 +133,7 @@ class Data_Read(InfluxBase):
                       "inlet_temp_c",
                       "outlet_temp_c",
                       "coolant_flow_m3h",
+                      "v_steam",
                       "tau",
                       "thermal_power_mw",
                       "reactivity_delta",
@@ -238,19 +241,18 @@ class Data_Read(InfluxBase):
 # approve = input("Type 'y' if you want to write data, type 'n' if you don't: ")
 
 # if approve == "y":
-with Data_Write() as write:
+'''with Data_Write() as write:
     write.initial_data()
-    time.sleep(2)
+    time.sleep(2)'''
 #
 # approve = input("Type 'y' if you want to download data, type 'n' if you don't: ")
 #
 # if approve == "y":
-# with Data_Read() as take:
-#     # take.take_data(last="", time_range="35m")
-#     take.take_single_data()
-#     # take.influx_to_df()
-#     time.sleep(2)
-#
-
+'''with Data_Read() as take:
+    take.take_data(last="", time_range="120h")
+    take.take_single_data()
+    take.influx_to_df()
+    time.sleep(2)
+    take.df.to_parquet('Influx_RBML_data.parquet')'''
 
 

@@ -1,2 +1,7 @@
 temps
 __pycache__/
+venv
+.env
+test.ipynb
+Influx_RBML_data.parquet
+.devcontainer
