@@ -154,7 +154,7 @@ class Reactor:
             # 6. ZABEZPIECZENIA FIZYCZNE
             # Nie możemy mieć mniej niż 0 prętów (całkowicie wyciągnięte) 
             # i nie więcej niż zadeklarowana liczba dostępnych w strefie.
-            max_available_rods = 85
+            max_available_rods = 85.0
             self.orm_value = max(0.0, min(new_orm, max_available_rods))
 
     def set_coolant_flow(self, target_flow_m3h):
