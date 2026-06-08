@@ -28,9 +28,9 @@ def main():
                     "reactivity_delta": reactor.reactivity_delta,
                     "xenon_level": reactor.xenon_level,
                     "neutron_flux_pct": reactor.neutron_flux_pct,
-                    "severity_level": reactor.severity_level,
-                    "subsystem": reactor.subsystem,
-                    "alarm_message": reactor.alarm_message,
+                    #"severity_level": reactor.severity_level,
+                    #"subsystem": reactor.subsystem,
+                    #"alarm_message": reactor.alarm_message,
                 }
                 write.generated_data(**data)
 

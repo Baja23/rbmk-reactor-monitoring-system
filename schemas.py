@@ -138,8 +138,8 @@ class Reactor:
             # 3. KIERUNEK RUCHU
             # Używamy float zamiast int, aby symulować np. ruch pręta o pół metra w ciągu sekundy.
             # Wartość 0.005 to tzw. "Wzmocnienie Regulatora" - im mniejsza, tym spokojniejszy ruch.
-            rod_movement = error * 0.05 * delta_t 
-            
+            rod_movement = int(error * 0.05 * delta_t)
+
             # 4. LIMIT PRĘDKOŚCI RUCHU
             # AR nie może poruszyć nagle 40 prętów. Może zmienić odpowiednik np. max 10 prętów na sekundę.
             # Funkcja min() i max() docina wartość do bezpiecznego przedziału [-10.0, 10.0]
