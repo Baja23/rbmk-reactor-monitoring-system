@@ -5,7 +5,9 @@ import time
 import pandas as pd
 import keyboard
 import threading
-
+from dotenv import load_dotenv
+import os
+load_dotenv()
 
 class InfluxBase:
     """Provide necessary attributes for database connection"""
@@ -13,10 +15,11 @@ class InfluxBase:
     def __init__(self):
         self.write_api = None
         self.query_api = None
-        self.url = ""
-        self.token = ""
-        self.org = ""
-        self.bucket = ""
+        self.url = os.getenv("URL")
+        self.url = "https://eu-central-1-1.aws.cloud2.influxdata.com/"
+        self.token = "mgFpC0vmS6Mn9Yc9XJcd1_wweo35NMOWe-2ET31CO9y6-ppBYYfoTUgDd8i0AqrnA3ze9NzLm3BIPkHnZe1asg=="
+        self.org = "Student project"
+        self.bucket = "reactor_test"
         self.client = InfluxDBClient(url=self.url, token=self.token, org=self.org)
 
     # "__enter__" and "__exit__"  are magical/special methods. These allow this class to become context manager
@@ -55,17 +58,17 @@ class Data_Write(InfluxBase):
         super().__init__()
 
     def initial_data(self):
-        """Manually creates data"""
+        """Manually creates data""" 
 
         point = (
-            Point("reactor_metrics_test2")
+            Point("rbmk_reactor_metrics")
             .field("fuel_reactivity", 5.905)
             .field("orm_value", 102.0)
             .field("partially_inserted", 0.0)
             .field("inlet_temp_c", 270.0)
             .field("outlet_temp_c", 284.0)
             .field("coolant_flow_m3h", 45000.0)
-            .field("tau", 10.0)
+            .field("tau", 100.0)
             .field("thermal_power_mw", 3200.0)
             .field("reactivity_delta", 0.0)
             .field("xenon_level", 1.0)
@@ -84,7 +87,7 @@ class Data_Write(InfluxBase):
     def generated_data(self, **data):
         """Takes data and converts to InfluxDB scheme"""
 
-        point = Point("reactor_metrics_test2")
+        point = Point("rbmk_reactor_metrics")
         for key, value in data.items():
             point = point.field(key, value)
 
@@ -118,9 +121,9 @@ class Data_Read(InfluxBase):
 
         self.tables = []
         self.query = f'''
-            from(bucket: "reactor_test")
+            from(bucket: "{self.bucket}")
               |> range(start: -{time_range})
-              |> filter(fn: (r) => r._measurement == "reactor_metrics_test2")
+              |> filter(fn: (r) => r._measurement == "rbmk_reactor_metrics")
               |> filter(fn: (r) =>
                   contains(
                     value: r._field,
@@ -131,14 +134,12 @@ class Data_Read(InfluxBase):
                       "inlet_temp_c",
                       "outlet_temp_c",
                       "coolant_flow_m3h",
+                      "v_steam",
                       "tau",
                       "thermal_power_mw",
                       "reactivity_delta",
                       "xenon_level",
                       "neutron_flux_pct",
-                      "severity_level",
-                      "subsystem",
-                      "alarm_message"
                     ]
 
                   )
@@ -149,6 +150,7 @@ class Data_Read(InfluxBase):
         self.query_api = self.client.query_api()
         try:
             self.tables = self.query_api.query(self.query, org=self.org)
+            print("Data successfully taken!")
         except Exception as e:
             print("Write error: ", e)
 
@@ -191,9 +193,9 @@ class Data_Read(InfluxBase):
         """Takes a data of a single field from latest record from database"""
 
         self.query = f'''
-                    from(bucket: "reactor_test")
+                    from(bucket: "{self.bucket}")
                       |> range(start: -48h)
-                      |> filter(fn: (r) => r._measurement == "reactor_metrics_test2")
+                      |> filter(fn: (r) => r._measurement == "rbmk_reactor_metrics")
                       |> filter(fn: (r) => r._field == "thermal_power_mw")
                       |> last()
                 '''
@@ -208,19 +210,41 @@ class Data_Read(InfluxBase):
             print("Write error: ", e)
 
 
+# data = {
+#     "fuel_reactivity": 5.905,
+#     "orm_value": 101.0,
+#     "partially_inserted": 0.0,
+#     "inlet_temp_c": 270.0,
+#     "outlet_temp_c": 284.0,
+#     "coolant_flow_m3h": 45000.0,
+#     "tau": 10.0,
+#     "thermal_power_mw": 3200.0,
+#     "reactivity_delta": 0.0,
+#     "xenon_level": 1.0,
+#     "neutron_flux_pct": 95.0,
+#     "severity_level": 1.0,
+#     "subsystem": "a",
+#     "alarm_message": "b",
+# }
 
 
 
-# with Data_Write() as write:
-#     write.initial_data()
-#     time.sleep(2)
 
 
+# approve = input("Type 'y' if you want to write data, type 'n' if you don't: ")
+
+# if approve == "y":
+with Data_Write() as write:
+    write.initial_data()
+    time.sleep(2)
+# #
+# approve = input("Type 'y' if you want to download data, type 'n' if you don't: ")
+#
+# if approve == "y":
 # with Data_Read() as take:
-#     take.take_data(last="", time_range="12h")
+#     take.take_data(last="", time_range="120h")
 #     take.influx_to_df()
 #     time.sleep(2)
-# # #
-
+#     #take.df.to_parquet('Influx_RBML_data.parquet')
 
 

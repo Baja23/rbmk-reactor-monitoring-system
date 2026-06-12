@@ -1,16 +1,13 @@
 temps
 __pycache__/
-schematest.py
-apptest.py
+venv
+.env
+test.ipynb
+Influx_RBML_data.parquet
+.devcontainer
+influx token.py
+LICENSE
 out.csv
-apptest2.py
-schematest2.py
-influx token.py
-schemabackup.py
-databasetest.py
+requirements.txt
 schemas old backup.py
-redis_test.py
-simulator.py
-test2.py
-influx token.py
-config.py
+schemas_new.py
