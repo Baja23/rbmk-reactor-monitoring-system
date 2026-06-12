@@ -1,2 +1,16 @@
 temps
 __pycache__/
+schematest.py
+apptest.py
+out.csv
+apptest2.py
+schematest2.py
+influx token.py
+schemabackup.py
+databasetest.py
+schemas old backup.py
+redis_test.py
+simulator.py
+test2.py
+influx token.py
+config.py
