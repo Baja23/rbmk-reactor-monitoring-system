@@ -16,10 +16,9 @@ class InfluxBase:
         self.write_api = None
         self.query_api = None
         self.url = os.getenv("URL")
-        self.url = "https://eu-central-1-1.aws.cloud2.influxdata.com/"
-        self.token = "mgFpC0vmS6Mn9Yc9XJcd1_wweo35NMOWe-2ET31CO9y6-ppBYYfoTUgDd8i0AqrnA3ze9NzLm3BIPkHnZe1asg=="
-        self.org = "Student project"
-        self.bucket = "reactor_test"
+        self.token = os.getenv("TOKEN")
+        self.org = os.getenv("ORG")
+        self.bucket = os.getenv("BUCKET")
         self.client = InfluxDBClient(url=self.url, token=self.token, org=self.org)
 
     # "__enter__" and "__exit__"  are magical/special methods. These allow this class to become context manager
