@@ -247,9 +247,9 @@ class Data_Read(InfluxBase):
 #
 # if approve == "y":
 # with Data_Read() as take:
-#     take.take_data(last="", time_range="120h")
+#     take.take_data(last="", time_range="4d")
 #     take.influx_to_df()
 #     time.sleep(2)
-#     #take.df.to_parquet('Influx_RBML_data.parquet')
+#     take.df.to_parquet('Influx_RBML_data.parquet')
 
 
