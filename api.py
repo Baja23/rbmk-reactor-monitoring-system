@@ -19,6 +19,7 @@ async def lifespan(app: FastAPI):
     r.delete("az5")
     yield
 
+# This disables public documentation generation. Other people will not be able to see the API points.
 app = FastAPI(
     lifespan=lifespan,
     docs_url=None,
@@ -27,10 +28,10 @@ app = FastAPI(
 )
 
 API_KEY = os.getenv("X_API_KEY")
-domain_url = os.getenv("DOMAIN_URL")
 
-# BaseModel enabled automatic parsing, validation and generating documentation
+# BaseModel enables automatic parsing, validation and generating documentation
 class GrafanaData(BaseModel):
+
     value: int | None = None
     name: str | None = None
     key: str | None = None
@@ -38,13 +39,14 @@ class GrafanaData(BaseModel):
 
 def verify_button_header(data:GrafanaData):
     '''Verify API key send in payload from Grafana'''
+
     if data.key != API_KEY:
         raise HTTPException(status_code=403, detail="Unauthorized access")
 
 # Launches a function that verifies API key
 @app.post("/webhook", dependencies=[Depends(verify_button_header)])
 async def grafana_webhook(data: GrafanaData):
-    '''Take data of attributes from Grafana'''
+    '''Accept data of attributes from Grafana'''
 
     print(f"Otrzymano wartości z Grafana przez POST - {data.name}: {data.value}")
     try:
