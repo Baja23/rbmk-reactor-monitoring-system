@@ -23,13 +23,13 @@ logger = logging.getLogger(__name__)
 
 # --- Configuration ---
 SEQ_LEN = 30
-INPUT_SIZE = 4  # Number of features
-HIDDEN_SIZE = 64
-NUM_LAYERS = 2
+INPUT_SIZE  = 12   # was 4
+HIDDEN_SIZE = 256  # was 64
+NUM_LAYERS  = 3    # was 2
 PARAMS = ["thermal_power_mw", "fuel_reactivity", "orm_value", "partially_inserted", 
 "inlet_temp_c", "outlet_temp_c", "coolant_flow_m3h", "v_steam", "xenon_level", "neutron_flux_pct"]
 THRESHOLD = 0.5  # MSE threshold for anomaly detection (reconstruction error)
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+DEVICE = "cpu"
 
 # --- Paths ---
 MODEL_PATH = Path(__file__).parent / "checkpoints" / "best_model.pth"
@@ -38,14 +38,21 @@ SCALER_PATH = Path(__file__).parent / "checkpoints" / "scaler.pkl"
 # --- Load model ---
 try:
     model = LSTMAutoencoder(
-        input_size=INPUT_SIZE,
-        hidden_size=HIDDEN_SIZE,
-        num_layers=NUM_LAYERS
+        input_size=checkpoint["input_size"],
+        hidden_size=checkpoint["hidden_size"],
+        num_layers=checkpoint["num_layers"],
     ).to(DEVICE)
-    checkpoint = torch.load(MODEL_PATH, map_location=DEVICE)
-    model.load_state_dict(checkpoint['model_state_dict'])
+    model.load_state_dict(checkpoint["model_state_dict"])  # no prefix stripping needed anymore
     model.eval()
-    logger.info(f"Model loaded from {MODEL_PATH}")
+
+    # Load scaler
+    with open(SCALER_PATH, "rb") as f:
+        scaler = pickle.load(f)
+
+    print(f"✓ Model loaded: input_size={checkpoint['input_size']}, "
+        f"hidden_size={checkpoint['hidden_size']}, "
+        f"num_layers={checkpoint['num_layers']}")
+    print(f"✓ Scaler expects {scaler.n_features_in_} features")
 except Exception as e:
     logger.error(f"Failed to load model: {e}")
     raise

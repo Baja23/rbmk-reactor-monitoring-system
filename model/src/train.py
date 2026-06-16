@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Tuple, Dict, List
 import json
 import time
-
+import pickle 
 
 class AnomalyTrainer:
     """
@@ -36,6 +36,7 @@ class AnomalyTrainer:
         model: nn.Module,
         train_loader: DataLoader,
         val_loader: DataLoader,
+        scaler, 
         lr: float = 1e-3,
         weight_decay: float = 1e-5,
         device: str = "cpu",
@@ -55,6 +56,7 @@ class AnomalyTrainer:
         self.model = model.to(device)
         self.train_loader = train_loader
         self.val_loader = val_loader
+        self.scaler = scaler 
         self.device = device
 
         # Loss function: Mean Squared Error
@@ -252,11 +254,14 @@ class AnomalyTrainer:
                 torch.save(
                     {
                         "epoch": epoch + 1,
-                        "model_state_dict": self.model.state_dict(),
+                        "model_state_dict": self.model.autoencoder.state_dict(),
                         "optimizer_state_dict": self.optimizer.state_dict(),
                         "val_loss": val_loss,
                     },
                     best_model_path,
+                    scaler_path = checkpoint_path / "scaler.pkl"
+                    with open(scaler_path, "wb") as f:
+                        pickle.dump(self.scaler, f)
                 )
                 print(f"  ✓ New best model saved (val_loss: {val_loss:.6f})")
 
