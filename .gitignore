@@ -5,4 +5,17 @@ venv
 test.ipynb
 Influx_RBML_data.parquet
 .devcontainer
+influx token.py
+LICENSE
+out.csv
+requirements.txt
+schemas old backup.py
+schemas_new.py
+temps
+__pycache__/
+venv
+.env
+test.ipynb
+Influx_RBML_data.parquet
+.devcontainer
 notes.txt
