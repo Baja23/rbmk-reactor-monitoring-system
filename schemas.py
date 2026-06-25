@@ -74,9 +74,18 @@ class Reactor:
         # Stała pojemności cieplnej (dobrana tak, by przy 3200MW i 45000m3/h delta T = ~14C)
         k_termo = 197.0
 
+        # Pojemność wodna reaktora (oszacowana przez ChatGPT)
+        water_cap = 50.0
+
+        # Dalszy kod zakłada pełne wypełnienie reaktora wodą, niezależnie od ilości pary.
+        water_cap_d = self.coolant_flow_m3h / 3600 * delta_t
+
+        # Temperatura wody w reaktorze przed podgrzaniem
+        water_temp_c = ((water_cap - water_cap_d) * self.outlet_temp_c + water_cap_d * self.inlet_temp_c) / water_cap
+
         # 1. Teoretyczny przyrost temperatury (jeśli woda by nie wrzała)
-        delta_t = k_termo * (self.thermal_power_mw / self.coolant_flow_m3h)
-        theoretical_outlet = self.inlet_temp_c + delta_t
+        delta_t = k_termo * (self.thermal_power_mw / water_cap)
+        theoretical_outlet = water_temp_c + delta_t
 
         # 2. Obliczanie Marginesu Niedogrzania
         subcooling_margin = boiling_point - self.inlet_temp_c
@@ -92,7 +101,7 @@ class Reactor:
 
             # Obliczamy ilość pary na podstawie naszego wzoru z poprzednich kroków.
             # Im mniejszy margines niedogrzania, tym mniej ciepła idzie w podgrzanie wody, a więcej w parę.
-            raw_voids = (3.068 * (self.thermal_power_mw / self.coolant_flow_m3h)) - (subcooling_margin * 0.005)
+            raw_voids = (3.068 * (self.thermal_power_mw * delta_t / water_cap)) - (subcooling_margin * 0.005)
 
             # Zabezpieczenie przed ujemną parą (objętość nie może spaść poniżej 0)
             self.v_steam = max(0.0, raw_voids)
